@@ -9,7 +9,6 @@ extern crate conrod_core;
 
 mod support;
 
-use plotters::drawing::bitmap_pixel::BGRXPixel;
 use plotters::prelude::*;
 use std::sync::{Arc, Mutex};
 
@@ -19,14 +18,14 @@ use chrono::{Date, Duration};
 use log::{info, warn};
 use std::{thread, time};
 
-use std::collections::vec_deque::VecDeque;
-
 use image::{ImageBuffer, Rgb, RgbImage, RgbaImage, buffer::ConvertBuffer};
 use rand::Rng;
-use std::path::Path;
 
 use conrod_core::{widget, Colorable, Positionable, Sizeable, Widget, color};
 use glium::Surface;
+
+use telemetry::{gather_telemetry, structures::TelemetryMessage};
+use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 
 pub struct App {
     gl: conrod_glium::Renderer, // OpenGL drawing backend.
@@ -35,10 +34,10 @@ pub struct App {
     ui: conrod_core::Ui,
 }
 
-impl App {
-    fn render(&mut self, data: &Vec<(DateTime<Local>, i32)>) -> conrod_core::image::Map<glium::texture::Texture2d> {
-        info!("{}", data.len());
+type DataPressure = Vec<(DateTime<Local>, u16)>;
 
+impl App {
+    fn render(&mut self, data_pressure: &DataPressure) -> conrod_core::image::Map<glium::texture::Texture2d> {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 
@@ -54,8 +53,8 @@ impl App {
         //let root = BitMapBackend::new(Path::new("/tmp/foo.png"), (780, 200)).into_drawing_area();
         root.fill(&WHITE).unwrap();
 
-        let oldest = data.first().unwrap().0 - chrono::Duration::seconds(40);
-        let newest = data.first().unwrap().0;
+        let oldest = data_pressure.first().unwrap().0 - chrono::Duration::seconds(40);
+        let newest = data_pressure.first().unwrap().0;
 
         let mut chart = ChartBuilder::on(&root)
             .x_label_area_size(40)
@@ -65,7 +64,7 @@ impl App {
         chart.configure_mesh().draw().unwrap();
         chart
             .draw_series(LineSeries::new(
-                data.iter().map(|x| (x.0, x.1)),
+                data_pressure.iter().map(|x| (x.0, x.1 as i32)),
                 ShapeStyle::from(&BLACK).filled(),
             ))
             .unwrap();
@@ -94,28 +93,25 @@ impl App {
         }
 
         image_map
-
-
-        //self.gl.draw(args.viewport(), |c, gl| {
-            //// Clear the screen.
-            //clear([0.0, 0.0, 0.0, 0.0], gl);
-
-            //let transform = c
-                //.transform
-                //.trans(x, y)
-                //.rot_rad(rotation)
-                //.trans(-25.0, -25.0);
-
-            //// Draw a box rotating around the middle of the screen.
-            //rectangle(RED, square, transform, gl);
-            ////image(&texture, c.transform, gl);
-            //image_graph.draw(&texture, &DrawState::default(), c.transform, gl);
-        //});
     }
 
     fn update(&mut self) {
         // Rotate 2 radians per second.
         //self.rotation += 2.0 * args.dt;
+    }
+}
+
+fn addPressure(data: &mut DataPressure, new_point: u16) {
+    data.insert(0, (Local::now(), new_point));
+    let oldest = data.first().unwrap().0 - chrono::Duration::seconds(40);
+    let newest = data.first().unwrap().0;
+    let mut i = 0;
+    while i != data.len() {
+        if oldest > (&mut data[i]).0 || newest < (&mut data[i]).0 {
+            let _ = data.remove(i);
+        } else {
+            i += 1;
+        }
     }
 }
 
@@ -136,8 +132,15 @@ fn addFakeData(data: &mut Vec<(DateTime<Local>, i32)>) {
 }
 
 fn main() {
+    if std::env::args().len() < 2 {
+        println!("Please specify the device to use as a serial port as the first argument");
+        return;
+    }
+
+    let port_id = std::env::args().nth(1).unwrap();
+
     simple_logger::init().unwrap();
-    let data = Arc::new(Mutex::new(Vec::new()));
+    let mut data_pressure = Vec::new();
 
     let mut events_loop = glium::glutin::EventsLoop::new();
     let window = glium::glutin::WindowBuilder::new()
@@ -164,21 +167,35 @@ fn main() {
         ui,
     };
 
-    let data_cloned = data.clone();
     let mut event_loop = support::EventLoop::new();
 
-    thread::spawn(move || {
-        loop {
-            {
-                let mut d = data_cloned.lock().unwrap();
-                addFakeData(&mut *d);
-            }
-            thread::sleep(time::Duration::from_millis(200));
-        }
+    let (tx, rx): (Sender<TelemetryMessage>, Receiver<TelemetryMessage>) =
+                std::sync::mpsc::channel();
+
+    std::thread::spawn(move || {
+        gather_telemetry(&port_id, tx);
     });
 
     'main: loop {
         trace!("Enter main loop");
+
+        match rx.try_recv() {
+            Ok(msg) => {
+                match msg {
+                    TelemetryMessage::DataSnapshot(snapshot) => {
+                        addPressure(&mut data_pressure, snapshot.pressure);
+                    },
+                    _ => {}
+                }
+            }
+            Err(TryRecvError::Empty) => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(TryRecvError::Disconnected) => {
+                panic!("Channel to serial port thread was closed");
+            }
+        }
+
         event_loop.needs_update();
         // Handle all events.
         for event in event_loop.next(&mut events_loop) {
@@ -208,7 +225,11 @@ fn main() {
         }
 
         info!("About to render");
-        let image_map = app_core.render(&*(data.lock().unwrap()));
+        if data_pressure.len() == 0 {
+            continue;
+        }
+
+        let image_map = app_core.render(&data_pressure);
         info!("Rendered");
 
         // Draw the `Ui` if it has changed.

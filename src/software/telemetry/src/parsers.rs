@@ -116,7 +116,7 @@ named!(
             >> sep
             >> battery_level: be_u8
             >> end
-            >> (TelemetryMessage::DataSnapshot {
+            >> (TelemetryMessage::DataSnapshot(DataSnapshot {
                 version: software_version.to_string(),
                 device_id: format!("{}-{}-{}", device_id1, device_id2, device_id3),
                 systick,
@@ -128,7 +128,7 @@ named!(
                 patient_valve_position,
                 blower_rpm,
                 battery_level,
-            })
+            }))
     )
 );
 

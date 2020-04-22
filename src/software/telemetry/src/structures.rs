@@ -26,6 +26,21 @@ pub enum AlarmPriority {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataSnapshot {
+    pub version: String,
+    pub device_id: String,
+    pub systick: u64,
+    pub centile: u16,
+    pub pressure: u16,
+    pub phase: Phase,
+    pub subphase: SubPhase,
+    pub blower_valve_position: u8,
+    pub patient_valve_position: u8,
+    pub blower_rpm: u8,
+    pub battery_level: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TelemetryMessage {
     BootMessage {
         version: String,
@@ -37,19 +52,7 @@ pub enum TelemetryMessage {
         min32: u32,
         max32: u32,
     },
-    DataSnapshot {
-        version: String,
-        device_id: String,
-        systick: u64,
-        centile: u16,
-        pressure: u16,
-        phase: Phase,
-        subphase: SubPhase,
-        blower_valve_position: u8,
-        patient_valve_position: u8,
-        blower_rpm: u8,
-        battery_level: u8,
-    },
+    DataSnapshot(DataSnapshot),
     MachineStateSnapshot {
         version: String,
         device_id: String,

@@ -18,18 +18,18 @@ use chrono::{Date, Duration};
 use log::{info, warn};
 use std::{thread, time};
 
-use image::{ImageBuffer, Rgb, RgbImage, RgbaImage, buffer::ConvertBuffer};
+use image::{buffer::ConvertBuffer, ImageBuffer, Rgb, RgbImage, RgbaImage};
 use rand::Rng;
 
-use conrod_core::{widget, Colorable, Positionable, Sizeable, Widget, color};
+use conrod_core::{color, widget, Colorable, Positionable, Sizeable, Widget};
 use glium::Surface;
 
+use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use telemetry::{gather_telemetry, structures::TelemetryMessage};
-use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 
 pub struct App {
     gl: conrod_glium::Renderer, // OpenGL drawing backend.
-    rotation: f64,  // Rotation for the square.
+    rotation: f64,              // Rotation for the square.
     display: support::GliumDisplayWinitWrapper,
     ui: conrod_core::Ui,
 }
@@ -37,15 +37,18 @@ pub struct App {
 type DataPressure = Vec<(DateTime<Local>, u16)>;
 
 impl App {
-    fn render(&mut self, data_pressure: &DataPressure) -> conrod_core::image::Map<glium::texture::Texture2d> {
+    fn render(
+        &mut self,
+        data_pressure: &DataPressure,
+    ) -> conrod_core::image::Map<glium::texture::Texture2d> {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 
         //let square = rectangle::square(0.0, 0.0, 50.0);
         let rotation = self.rotation;
         //let (x, y) = (
-            //args.window_size[0] / 2.0,
-            //args.window_size[1] / 2.0 + args.window_size[1] / 4.0,
+        //args.window_size[0] / 2.0,
+        //args.window_size[1] / 2.0 + args.window_size[1] / 4.0,
         //);
 
         let mut buffer = vec![0; (780 * 200 * 4) as usize];
@@ -57,9 +60,9 @@ impl App {
         let newest = data_pressure.first().unwrap().0;
 
         let mut chart = ChartBuilder::on(&root)
-            .x_label_area_size(40)
+            .x_label_area_size(0)
             .y_label_area_size(40)
-            .build_ranged(oldest..newest, 0..10)
+            .build_ranged(oldest..newest, 0..70)
             .unwrap();
         chart.configure_mesh().draw().unwrap();
         chart
@@ -73,10 +76,16 @@ impl App {
         drop(root);
         let rgba_image: RgbaImage = RgbImage::from_raw(780, 200, buffer).unwrap().convert();
         let image_dimensions = rgba_image.dimensions();
-        let raw_image = glium::texture::RawImage2d::from_raw_rgba_reversed(&rgba_image.into_raw(), image_dimensions);
+        let raw_image = glium::texture::RawImage2d::from_raw_rgba_reversed(
+            &rgba_image.into_raw(),
+            image_dimensions,
+        );
         let image_texture = glium::texture::Texture2d::new(&self.display.0, raw_image).unwrap();
 
-        let (w, h) = (image_texture.get_width(), image_texture.get_height().unwrap());
+        let (w, h) = (
+            image_texture.get_width(),
+            image_texture.get_height().unwrap(),
+        );
         let mut image_map = conrod_core::image::Map::new();
         let image = image_map.insert(image_texture);
 
@@ -87,9 +96,14 @@ impl App {
         {
             let mut ui = self.ui.set_widgets();
             // Draw a light blue background.
-            widget::Canvas::new().color(color::LIGHT_BLUE).set(ids.background, &mut ui);
+            widget::Canvas::new()
+                .color(color::LIGHT_BLUE)
+                .set(ids.background, &mut ui);
             // Instantiate the `Image` at its full size in the middle of the window.
-            widget::Image::new(image).w_h(w as f64, h as f64).middle().set(ids.content, &mut ui);
+            widget::Image::new(image)
+                .w_h(w as f64, h as f64)
+                .middle()
+                .set(ids.content, &mut ui);
         }
 
         image_map
@@ -147,7 +161,6 @@ fn main() {
         .with_title("Conrod Graph Widget")
         .with_dimensions((800, 400).into());
 
-
     let context = glium::glutin::ContextBuilder::new()
         .with_multisampling(4)
         .with_vsync(true);
@@ -170,7 +183,7 @@ fn main() {
     let mut event_loop = support::EventLoop::new();
 
     let (tx, rx): (Sender<TelemetryMessage>, Receiver<TelemetryMessage>) =
-                std::sync::mpsc::channel();
+        std::sync::mpsc::channel();
 
     std::thread::spawn(move || {
         gather_telemetry(&port_id, tx);
@@ -180,14 +193,12 @@ fn main() {
         trace!("Enter main loop");
 
         match rx.try_recv() {
-            Ok(msg) => {
-                match msg {
-                    TelemetryMessage::DataSnapshot(snapshot) => {
-                        addPressure(&mut data_pressure, snapshot.pressure);
-                    },
-                    _ => {}
+            Ok(msg) => match msg {
+                TelemetryMessage::DataSnapshot(snapshot) => {
+                    addPressure(&mut data_pressure, snapshot.pressure);
                 }
-            }
+                _ => {}
+            },
             Err(TryRecvError::Empty) => {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
@@ -199,7 +210,6 @@ fn main() {
         event_loop.needs_update();
         // Handle all events.
         for event in event_loop.next(&mut events_loop) {
-
             // Use the `winit` backend feature to convert the winit event to a conrod one.
             if let Some(event) = support::convert_event(event.clone(), &app_core.display) {
                 app_core.ui.handle_event(event);
@@ -207,19 +217,18 @@ fn main() {
 
             // Break from the loop upon `Escape` or closed window.
             match event.clone() {
-                glium::glutin::Event::WindowEvent { event, .. } => {
-                    match event {
-                        glium::glutin::WindowEvent::CloseRequested |
-                        glium::glutin::WindowEvent::KeyboardInput {
-                            input: glium::glutin::KeyboardInput {
+                glium::glutin::Event::WindowEvent { event, .. } => match event {
+                    glium::glutin::WindowEvent::CloseRequested
+                    | glium::glutin::WindowEvent::KeyboardInput {
+                        input:
+                            glium::glutin::KeyboardInput {
                                 virtual_keycode: Some(glium::glutin::VirtualKeyCode::Escape),
                                 ..
                             },
-                            ..
-                        } => break 'main,
-                        _ => (),
-                    }
-                }
+                        ..
+                    } => break 'main,
+                    _ => (),
+                },
                 _ => (),
             }
         }
@@ -235,10 +244,15 @@ fn main() {
         // Draw the `Ui` if it has changed.
         if let Some(primitives) = app_core.ui.draw_if_changed() {
             info!("It has changed");
-            app_core.gl.fill(&app_core.display.0, primitives, &image_map);
+            app_core
+                .gl
+                .fill(&app_core.display.0, primitives, &image_map);
             let mut target = app_core.display.0.draw();
             target.clear_color(0.0, 0.0, 0.0, 1.0);
-            app_core.gl.draw(&app_core.display.0, &mut target, &image_map).unwrap();
+            app_core
+                .gl
+                .draw(&app_core.display.0, &mut target, &image_map)
+                .unwrap();
             target.finish().unwrap();
         }
     }

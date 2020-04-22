@@ -195,6 +195,7 @@ fn main() {
         match rx.try_recv() {
             Ok(msg) => match msg {
                 TelemetryMessage::DataSnapshot(snapshot) => {
+                    info!("New pressure point: {}", snapshot.pressure);
                     addPressure(&mut data_pressure, snapshot.pressure);
                 }
                 _ => {}
@@ -235,6 +236,7 @@ fn main() {
 
         info!("About to render");
         if data_pressure.len() == 0 {
+            info!("Nothing to render yet, continue..");
             continue;
         }
 

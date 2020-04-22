@@ -28,7 +28,7 @@ use graphics::rectangle;
 use graphics::rectangle::rectangle_by_corners;
 use graphics::{clear, Image};
 use image::ImageBuffer;
-use image::{Rgb, RgbaImage};
+use image::{Rgb, RgbImage, RgbaImage};
 use opengl_graphics::{GlGraphics, OpenGL, Texture, TextureSettings};
 use piston::event_loop::{EventSettings, Events};
 use piston::input::{RenderArgs, RenderEvent, UpdateArgs, UpdateEvent};
@@ -36,6 +36,8 @@ use piston::window::WindowSettings;
 use piston_window::PistonWindow;
 use rand::Rng;
 use std::path::Path;
+
+use crate::image::buffer::ConvertBuffer;
 
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
@@ -61,7 +63,7 @@ impl App {
         let mut buffer = vec![0; (780 * 200 * 4) as usize];
         let root = BitMapBackend::with_buffer(&mut buffer, (780, 200)).into_drawing_area();
         //let root = BitMapBackend::new(Path::new("/tmp/foo.png"), (780, 200)).into_drawing_area();
-        root.fill(&WHITE);
+        root.fill(&WHITE).unwrap();
 
         let oldest = self.data.first().unwrap().0 - chrono::Duration::seconds(40);
         let newest = self.data.first().unwrap().0;
@@ -83,11 +85,11 @@ impl App {
         drop(root);
         let image_graph = Image::new().rect(rectangle_by_corners(0.0, 0.0, 780.0, 200.0));
         let texture = Texture::from_image(
-            &RgbaImage::from_raw(780, 200, ((&mut buffer).to_vec())).unwrap(),
+            &RgbImage::from_raw(780, 200, buffer).unwrap().convert(),
             &TextureSettings::new(),
         ); //(&mut buffer[..], 780, 200, &TextureSettings::new())
            //.unwrap();
-           //          Texture::from_path(Path::new("/tmp/foo.png"), &TextureSettings::new()).unwrap();
+        //let texture = Texture::from_path(Path::new("/tmp/foo.png"), &TextureSettings::new()).unwrap();
 
         self.gl.draw(args.viewport(), |c, gl| {
             // Clear the screen.

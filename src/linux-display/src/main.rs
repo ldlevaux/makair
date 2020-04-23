@@ -40,6 +40,7 @@ impl App {
     fn render(
         &mut self,
         data_pressure: &DataPressure,
+        cycles: u8
     ) -> conrod_core::image::Map<glium::texture::Texture2d> {
         const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
         const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
@@ -90,20 +91,26 @@ impl App {
         let image = image_map.insert(image_texture);
 
         // The `WidgetId` for our background and `Image` widgets.
-        widget_ids!(struct Ids { background, content });
+        widget_ids!(struct Ids { background, content, cycles });
         let ids = Ids::new(self.ui.widget_id_generator());
 
         {
-            let mut ui = self.ui.set_widgets();
+            let ui = &mut self.ui.set_widgets();
             // Draw a light blue background.
             widget::Canvas::new()
-                .color(color::LIGHT_BLUE)
-                .set(ids.background, &mut ui);
+                .color(color::WHITE)
+                .set(ids.background, ui);
             // Instantiate the `Image` at its full size in the middle of the window.
             widget::Image::new(image)
                 .w_h(w as f64, h as f64)
-                .middle()
-                .set(ids.content, &mut ui);
+                .mid_top()
+                .set(ids.content, ui);
+
+            widget::Text::new(&format!("Cycles per minute: {}", cycles))
+                .color(color::LIGHT_BLUE)
+                .bottom_left()
+                .font_size(32)
+                .set(ids.cycles, ui);
         }
 
         image_map
@@ -168,6 +175,8 @@ fn main() {
     // construct our `Ui`.
     let mut ui = conrod_core::UiBuilder::new([800 as f64, 400 as f64]).build();
 
+    ui.fonts.insert_from_file("./NotoSans-Regular.ttf").unwrap();
+
     let display = glium::Display::new(window, context, &events_loop).unwrap();
     let display = support::GliumDisplayWinitWrapper(display);
     let mut renderer = conrod_glium::Renderer::new(&display.0).unwrap();
@@ -190,6 +199,7 @@ fn main() {
     });
 
     let mut last_point = Local::now();
+    let mut last_cycles = 0;
 
     'main: loop {
         // TODO: only update when needed
@@ -205,6 +215,9 @@ fn main() {
                                 last_point = now;
                                 addPressure(&mut data_pressure, snapshot.pressure);
                             }
+                        }
+                        TelemetryMessage::MachineStateSnapshot { cpm_command, .. } => {
+                            last_cycles = cpm_command;
                         }
                         _ => {}
                     }
@@ -248,7 +261,7 @@ fn main() {
             continue;
         }
 
-        let image_map = app_core.render(&data_pressure);
+        let image_map = app_core.render(&data_pressure, last_cycles);
 
         // Draw the `Ui` if it has changed.
         if let Some(primitives) = app_core.ui.draw_if_changed() {

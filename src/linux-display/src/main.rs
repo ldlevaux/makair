@@ -192,6 +192,8 @@ fn main() {
     let mut last_point = Local::now();
 
     'main: loop {
+        // TODO: only update when needed
+        event_loop.needs_update();
         'thread_rcv: loop {
             match rx.try_recv() {
                 Ok(msg) => {
@@ -202,7 +204,6 @@ fn main() {
                             if last > chrono::Duration::milliseconds(32) {
                                 last_point = now;
                                 addPressure(&mut data_pressure, snapshot.pressure);
-                                event_loop.needs_update();
                             }
                         }
                         _ => {}

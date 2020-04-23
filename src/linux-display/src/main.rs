@@ -116,7 +116,7 @@ impl App {
 }
 
 fn addPressure(data: &mut DataPressure, new_point: u16) {
-    data.insert(0, (Local::now(), new_point));
+    data.insert(0, (Local::now(), new_point / 10));
     let oldest = data.first().unwrap().0 - chrono::Duration::seconds(40);
     let newest = data.first().unwrap().0;
     let mut i = 0;
@@ -189,31 +189,40 @@ fn main() {
         gather_telemetry(&port_id, tx);
     });
 
-    'main: loop {
-        trace!("Enter main loop");
+    let mut last_point = Local::now();
 
-        match rx.try_recv() {
-            Ok(msg) => match msg {
-                TelemetryMessage::DataSnapshot(snapshot) => {
-                    info!("New pressure point: {}", snapshot.pressure);
-                    addPressure(&mut data_pressure, snapshot.pressure);
+    'main: loop {
+        'thread_rcv: loop {
+            match rx.try_recv() {
+                Ok(msg) => {
+                    match msg {
+                        TelemetryMessage::DataSnapshot(snapshot) => {
+                            let now = Local::now();
+                            let last = now - last_point;
+                            if last > chrono::Duration::milliseconds(32) {
+                                last_point = now;
+                                addPressure(&mut data_pressure, snapshot.pressure);
+                                event_loop.needs_update();
+                            }
+                        }
+                        _ => {}
+                    }
+                },
+                Err(TryRecvError::Empty) => {
+                    break 'thread_rcv;
                 }
-                _ => {}
-            },
-            Err(TryRecvError::Empty) => {
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            Err(TryRecvError::Disconnected) => {
-                panic!("Channel to serial port thread was closed");
+                Err(TryRecvError::Disconnected) => {
+                    panic!("Channel to serial port thread was closed");
+                }
             }
         }
 
-        event_loop.needs_update();
         // Handle all events.
         for event in event_loop.next(&mut events_loop) {
             // Use the `winit` backend feature to convert the winit event to a conrod one.
             if let Some(event) = support::convert_event(event.clone(), &app_core.display) {
                 app_core.ui.handle_event(event);
+                event_loop.needs_update();
             }
 
             // Break from the loop upon `Escape` or closed window.
@@ -234,18 +243,14 @@ fn main() {
             }
         }
 
-        info!("About to render");
         if data_pressure.len() == 0 {
-            info!("Nothing to render yet, continue..");
             continue;
         }
 
         let image_map = app_core.render(&data_pressure);
-        info!("Rendered");
 
         // Draw the `Ui` if it has changed.
         if let Some(primitives) = app_core.ui.draw_if_changed() {
-            info!("It has changed");
             app_core
                 .gl
                 .fill(&app_core.display.0, primitives, &image_map);

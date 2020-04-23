@@ -166,7 +166,7 @@ named!(
             >> sep
             >> previous_alarm_codes: u8_array
             >> end
-            >> (TelemetryMessage::MachineStateSnapshot {
+            >> (TelemetryMessage::MachineStateSnapshot(MachineSnapshot {
                 version: software_version.to_string(),
                 device_id: format!("{}-{}-{}", device_id1, device_id2, device_id3),
                 cycle,
@@ -179,7 +179,7 @@ named!(
                 previous_peep_pressure,
                 current_alarm_codes,
                 previous_alarm_codes,
-            })
+            }))
     )
 );
 

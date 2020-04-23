@@ -40,6 +40,22 @@ pub struct DataSnapshot {
     pub battery_level: u8,
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct MachineSnapshot {
+    pub version: String,
+    pub device_id: String,
+    pub cycle: u32,
+    pub peak_command: u8,
+    pub plateau_command: u8,
+    pub peep_command: u8,
+    pub cpm_command: u8,
+    pub previous_peak_pressure: u8,
+    pub previous_plateau_pressure: u8,
+    pub previous_peep_pressure: u8,
+    pub current_alarm_codes: Vec<u8>,
+    pub previous_alarm_codes: Vec<u8>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TelemetryMessage {
     BootMessage {
@@ -53,20 +69,7 @@ pub enum TelemetryMessage {
         max32: u32,
     },
     DataSnapshot(DataSnapshot),
-    MachineStateSnapshot {
-        version: String,
-        device_id: String,
-        cycle: u32,
-        peak_command: u8,
-        plateau_command: u8,
-        peep_command: u8,
-        cpm_command: u8,
-        previous_peak_pressure: u8,
-        previous_plateau_pressure: u8,
-        previous_peep_pressure: u8,
-        current_alarm_codes: Vec<u8>,
-        previous_alarm_codes: Vec<u8>,
-    },
+    MachineStateSnapshot(MachineSnapshot),
     AlarmTrap {
         version: String,
         device_id: String,

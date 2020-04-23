@@ -5,7 +5,6 @@ extern crate nom;
 
 mod parsers;
 pub mod structures;
-pub mod state;
 
 use serial::prelude::*;
 use std::io::Read;
@@ -13,8 +12,6 @@ use std::sync::mpsc::Sender;
 
 use parsers::*;
 use structures::*;
-
-use crate::state::TelemetryState;
 
 pub fn gather_telemetry(port_id: &str, tx: Sender<TelemetryMessage>) {
     loop {
